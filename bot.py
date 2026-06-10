@@ -9,16 +9,12 @@ from util import (load_message, send_text, send_image, show_main_menu,
 
 import credentials
 
-
-# 1. *"Випадковий факт"*
-# Телеграм-бот повинен обробляти команду /random.
+### 2. *"ChatGPT інтерфейс"*
+# Телеграм-бот повинен обробляти команду /gpt.
 # При обробці команди він надсилає заздалегідь підготовлене зображення
-# та робить запит до ChatGPT із заздалегідь підготовленим промптом.
-# Відповідь ChatGPT потрібно отримати та передати користувачеві.
-# До повідомлення має бути прикріплена кнопка "Закінчити", натискання на яку
-# працює так само, як команда /start.
-# І кнопка "Хочу ще факт", натискання на яку
-# працює так само, як команда /random
+# та робить запит до ChatGPT, передаючи йому
+# текст отриманого повідомлення. Відповідь ChatGPT потрібно отримати та
+# передати користувачеві текстовим повідомленням
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -40,9 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_image(update, context, 'random')
     prompt = load_prompt('random')
-    # response = await chat_gpt.send_question(prompt, 'Давай рандомний факт')
-    response = 'Interesting fact'
-    # await send_text(update, context, response)
+    response = await chat_gpt.send_question(prompt, 'Давай рандомний факт')
     await send_text_buttons(
         update, context,
         response,
@@ -63,9 +57,18 @@ async def random_buttons_handler(update: Update, context):
 chat_gpt = ChatGptService(credentials.ChatGPT_TOKEN)
 app = ApplicationBuilder().token(credentials.BOT_TOKEN).build()
 
+async def gpt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    full_text = update.message.text
+    user_prompt = full_text[5:]
+    await send_image(update, context, 'gpt')
+    gpt_response = await chat_gpt.send_question('', user_prompt)
+    await send_text(update, context, gpt_response)
+
+
 # Зареєструвати обробник команди можна так:
 app.add_handler(CommandHandler('start', start))
 app.add_handler(CommandHandler('random', random))
+app.add_handler(CommandHandler('gpt', gpt))
 
 # Зареєструвати обробник колбеку можна так:
 app.add_handler(CallbackQueryHandler(random_buttons_handler, pattern='^random_.*'))
