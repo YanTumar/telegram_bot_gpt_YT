@@ -61,8 +61,8 @@ async def gpt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     full_text = update.message.text
     user_prompt = full_text[5:]
     await send_image(update, context, 'gpt')
-    # gpt_response = await chat_gpt.send_question('', user_prompt)
-    gpt_response = "TestText"
+    gpt_response = await chat_gpt.send_question('', user_prompt)
+    # gpt_response = "TestText"
     await send_text(update, context, gpt_response)
 
 
