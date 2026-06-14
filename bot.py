@@ -151,8 +151,21 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         gpt_response = await chat_gpt.send_question(character_prompt, user_text)
         await send_text_buttons(update, context, gpt_response, {'talk_end': "Закінчити розмову"})
 
-    else:
-        await send_text(update, context, "Будь ласка, оберіть режим роботи в головному меню.")
+
+    elif mode == "QUIZ_MODE":
+        context.user_data['quiz_questions_count'] += 1
+        gpt_response = await chat_gpt.add_message(user_text)
+        if "Правильно" in gpt_response:
+            context.user_data['quiz_score'] += 1
+        await send_text(update, context, gpt_response)
+
+        if context.user_data['quiz_questions_count'] >= 5:
+            await send_text(update, context, f"Квіз завершено! Ваш результат: {context.user_data['quiz_score']} з 5")
+            chat_modes[update.effective_user.id] = None
+            await start(update, context)
+        else:
+            gpt_next_question = await chat_gpt.add_message('quiz_more')
+            await send_text(update, context, gpt_next_question)
 
 async def gpt_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query.data
@@ -181,9 +194,11 @@ async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     query = update.callback_query.data
     await update.callback_query.answer()
+    context.user_data['quiz_questions_count'] = 0
     context.user_data['quiz_score'] = 0
     prompt = load_prompt('quiz')
-    gpt_response = await chat_gpt.send_question(prompt, query)
+    chat_gpt.set_prompt(prompt)
+    gpt_response = await chat_gpt.add_message(query)
     await send_text(update, context, gpt_response)
 
 
@@ -192,6 +207,7 @@ app.add_handler(CommandHandler('start', start))
 app.add_handler(CommandHandler('random', random))
 app.add_handler(CommandHandler('gpt', gpt))
 app.add_handler(CommandHandler('talk', talk))
+app.add_handler(CommandHandler('quiz', quiz))
 app.add_handler(CallbackQueryHandler(talk_buttons_handler, pattern='^talk_end.*$'))
 app.add_handler(CallbackQueryHandler(gpt_buttons_handler, pattern='^gpt_.*$'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*$'))
