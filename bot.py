@@ -41,6 +41,12 @@ TALK_BUTTONS = {
     'talk_hawking': "Стівен Гокінг"
 }
 
+QUIZ_BUTTONS = {
+    'quiz_prog': "Програмування",
+    'quiz_math': "Математика",
+    'quiz_history': "Історія"
+}
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_modes[update.effective_user.id] = None
     text = load_message('main')
@@ -161,6 +167,15 @@ async def talk_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         del context.user_data['prompt']
         await start(update, context)
     await update.callback_query.answer()
+
+async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await is_user_busy(update, context):
+        return
+    chat_modes[update.effective_user.id] = 'QUIZ_MODE'
+    start_message = load_message('quiz')
+    await send_image(update, context, 'quiz')
+    await send_text_buttons(update, context, start_message, QUIZ_BUTTONS)
+
 
 # Зареєструвати обробник команди можна так:
 app.add_handler(CommandHandler('start', start))
