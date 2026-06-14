@@ -19,18 +19,27 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     mode = chat_modes.get(user_id)
 
     if mode == 'GPT_MODE':
+        gpt_warning = "Ця кнопка вже недійсна в поточному режимі."
         if update.message and update.message.text:
             await plain_text_handler(update, context)
             return True
         elif update.callback_query:
-            await update.callback_query.answer("Ця кнопка вже недійсна в поточному режимі.")
+            await update.callback_query.answer(gpt_warning)
             return True
 
     if mode == 'TALK_MODE':
+        warning_text = "Будь ласка, спочатку закінчіть розмову з відомою особистістю."
         if update.callback_query:
-            await update.callback_query.answer()
-        await send_text(update, context, "Будь ласка, спочатку закінчіть розмову з відомою особистістю.")
+            await update.callback_query.answer(warning_text)
+        else:
+            await send_text(update, context, warning_text)
         return True
+
+    if mode == 'QUIZ_MODE':
+        warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
+        if update.callback_query:
+            await update.callback_query.answer(warning_quiz)
+            return True
     return False
 
 TALK_BUTTONS = {
@@ -123,11 +132,12 @@ async def talk_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fin = {
         'talk_end': "Закінчити розмову"
     }
+    if await is_user_busy(update, context):
+        return
     await update.callback_query.answer()
     query = update.callback_query.data
     prompt = load_prompt(query)
     chat_gpt.set_prompt(prompt)
-    context.user_data['prompt'] = prompt
     chat_modes[update.effective_user.id] = 'TALK_MODE'
     await send_image(update, context, query)
 
