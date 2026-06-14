@@ -107,7 +107,8 @@ async def gpt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_text(update, context, welcome_message)
     else:
         prompt = load_prompt('gpt')
-        gpt_response = await chat_gpt.send_question(prompt, user_prompt)
+        chat_gpt.set_prompt(prompt)
+        gpt_response = await chat_gpt.add_message(user_prompt)
         await send_text(update, context, gpt_response)
 
 async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -125,6 +126,7 @@ async def talk_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     query = update.callback_query.data
     prompt = load_prompt(query)
+    chat_gpt.set_prompt(prompt)
     context.user_data['prompt'] = prompt
     chat_modes[update.effective_user.id] = 'TALK_MODE'
     await send_image(update, context, query)
@@ -139,18 +141,12 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_text = update.message.text
 
     if mode == "GPT_MODE":
-        prompt = load_prompt('gpt')
-        gpt_response = await chat_gpt.send_question(prompt, user_text)
+        gpt_response = await chat_gpt.add_message(user_text)
         await send_text_buttons(update, context, gpt_response, {'gpt_end': "Закінчити розмову"})
 
     elif mode == "TALK_MODE":
-        character_prompt = context.user_data.get('prompt')
-        if not character_prompt:
-            await send_text(update, context, "Будь ласка, спочатку оберіть персонажа за допомогою команди /talk")
-            return
-        gpt_response = await chat_gpt.send_question(character_prompt, user_text)
+        gpt_response = await chat_gpt.add_message(user_text)
         await send_text_buttons(update, context, gpt_response, {'talk_end': "Закінчити розмову"})
-
 
     elif mode == "QUIZ_MODE":
         context.user_data['quiz_questions_count'] += 1
@@ -171,13 +167,14 @@ async def gpt_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query.data
     if query == 'gpt_end':
         chat_modes[update.effective_user.id] = None
+        chat_gpt.message_list.clear()
         await start(update, context)
     await update.callback_query.answer()
 
 async def talk_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query.data
     if query == 'talk_end':
-        del context.user_data['prompt']
+        chat_gpt.message_list.clear()
         await start(update, context)
     await update.callback_query.answer()
 
