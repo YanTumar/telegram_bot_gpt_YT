@@ -44,7 +44,7 @@ TALK_BUTTONS = {
 QUIZ_BUTTONS = {
     'quiz_prog': "Програмування",
     'quiz_math': "Математика",
-    'quiz_history': "Історія"
+    'quiz_biology': "Біологія"
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -176,6 +176,16 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_image(update, context, 'quiz')
     await send_text_buttons(update, context, start_message, QUIZ_BUTTONS)
 
+async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await is_user_busy(update, context):
+        return
+    query = update.callback_query.data
+    await update.callback_query.answer()
+    context.user_data['quiz_score'] = 0
+    prompt = load_prompt('quiz')
+    gpt_response = await chat_gpt.send_question(prompt, query)
+    await send_text(update, context, gpt_response)
+
 
 # Зареєструвати обробник команди можна так:
 app.add_handler(CommandHandler('start', start))
@@ -185,6 +195,7 @@ app.add_handler(CommandHandler('talk', talk))
 app.add_handler(CallbackQueryHandler(talk_buttons_handler, pattern='^talk_end.*$'))
 app.add_handler(CallbackQueryHandler(gpt_buttons_handler, pattern='^gpt_.*$'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*$'))
+app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*$'))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, plain_text_handler))
 
 
