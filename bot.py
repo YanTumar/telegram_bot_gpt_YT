@@ -28,6 +28,18 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await update.callback_query.answer(gpt_warning)
             return True
 
+    elif mode == 'RANDOM_MODE':
+        random_warning = "Будь ласка, спочатку завершіть перегляд факту"
+        if update.callback_query:
+            if update.callback_query.data.startswith('random_'):
+                return False
+            else:
+                await update.callback_query.answer(random_warning)
+                return True
+        elif update.message and update.message.text:
+            await send_text(update, context, random_warning)
+            return True
+
     elif mode == 'TALK_MODE':
         warning_text = "Будь ласка, спочатку закінчіть розмову з відомою особистістю."
         if update.callback_query:
@@ -35,6 +47,18 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
         else:
             await send_text(update, context, warning_text)
         return True
+
+    elif mode == 'TALK_CHOICE_MODE':
+        if update.callback_query:
+            if update.callback_query.data.startswith('talk_'):
+                return False
+            else:
+                await update.callback_query.answer("Спочатку оберіть відому особу зі списку.")
+                return True
+            
+        elif update.message:
+            await send_text(update, context, "Будь ласка, оберіть співрозмовника, натиснувши на кнопку.")
+            return True
 
     elif mode == 'QUIZ_MODE':
         if update.callback_query:
@@ -94,6 +118,7 @@ async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await send_image(update, context, 'random')
     intro_text = load_message('random')
+    chat_modes[update.effective_user.id] = 'RANDOM_MODE'
     await send_text(update, context, intro_text)
     prompt = load_prompt('random')
     response = await chat_gpt.send_question(prompt, 'Давай рандомний факт')
@@ -141,9 +166,15 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await send_image(update, context, 'talk')
     message = load_message('talk')
+    chat_modes[update.effective_user.id] = 'TALK_CHOICE_MODE'
     await send_text_buttons(update, context, message, TALK_BUTTONS)
 
 async def talk_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+    if current_mode != 'TALK_CHOICE_MODE':
+        await update.callback_query.answer("Цей список вже застарів")
+        return
     fin = {
         'talk_end': "Закінчити розмову"
     }
@@ -197,6 +228,13 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def gpt_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query.data
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+
+    if current_mode != 'GPT_MODE':
+        await update.callback_query.answer('Ця команда вже застаріла')
+        return
+
     if query == 'gpt_end':
         chat_modes[update.effective_user.id] = None
         chat_gpt.message_list.clear()
