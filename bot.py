@@ -13,6 +13,7 @@ chat_gpt = ChatGptService(credentials.ChatGPT_TOKEN)
 app = ApplicationBuilder().token(credentials.BOT_TOKEN).build()
 
 chat_modes = {}
+warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
 
 async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
@@ -27,7 +28,7 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await update.callback_query.answer(gpt_warning)
             return True
 
-    if mode == 'TALK_MODE':
+    elif mode == 'TALK_MODE':
         warning_text = "Будь ласка, спочатку закінчіть розмову з відомою особистістю."
         if update.callback_query:
             await update.callback_query.answer(warning_text)
@@ -35,15 +36,25 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             await send_text(update, context, warning_text)
         return True
 
-    if mode == 'QUIZ_MODE':
-        warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
+    elif mode == 'QUIZ_MODE':
         if update.callback_query:
             if not update.callback_query.data.startswith('quiz_'):
                 await update.callback_query.answer(warning_quiz)
                 return True
+
         elif update.message and update.message.text and update.message.text.startswith('/'):
             await send_text(update, context, warning_quiz)
             return True
+
+    elif mode == 'QUIZ_GAME_MODE':
+        if update.callback_query:
+            await update.callback_query.answer(warning_quiz)
+            return True
+
+        elif update.message and update.message.text and update.message.text.startswith('/'):
+            await send_text(update, context, warning_quiz)
+            return True
+
     return False
 
 TALK_BUTTONS = {
@@ -162,9 +173,10 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         gpt_response = await chat_gpt.add_message(user_text)
         await send_text_buttons(update, context, gpt_response, {'talk_end': "Закінчити розмову"})
 
-    elif mode == "QUIZ_MODE":
+    elif mode == "QUIZ_GAME_MODE":
         context.user_data['quiz_questions_count'] += 1
         gpt_response = await chat_gpt.add_message(user_text)
+
         if "Правильно" in gpt_response:
             context.user_data['quiz_score'] += 1
         await send_text(update, context, gpt_response)
@@ -173,6 +185,7 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await send_text(update, context, f"Квіз завершено! Ваш результат: {context.user_data['quiz_score']} з 5")
             chat_modes[update.effective_user.id] = None
             await start(update, context)
+
         else:
             gpt_next_question = await chat_gpt.add_message('quiz_more')
             await send_text(update, context, gpt_next_question)
@@ -203,6 +216,7 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_user_busy(update, context):
         return
+    chat_modes[update.effective_user.id] = 'QUIZ_GAME_MODE'
     query = update.callback_query.data
     await update.callback_query.answer()
     context.user_data['quiz_questions_count'] = 0
