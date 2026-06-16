@@ -219,6 +219,13 @@ async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_text_buttons(update, context, start_message, QUIZ_BUTTONS)
 
 async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+
+    if current_mode != 'QUIZ_MODE':
+        await update.callback_query.answer('Цей квіз уже завершено або він недійсний.')
+        return
+
     if await is_user_busy(update, context):
         return
     chat_modes[update.effective_user.id] = 'QUIZ_GAME_MODE'
