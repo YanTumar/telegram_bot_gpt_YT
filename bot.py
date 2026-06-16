@@ -182,9 +182,14 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await send_text(update, context, gpt_response)
 
         if context.user_data['quiz_questions_count'] >= 5:
-            await send_text(update, context, f"Квіз завершено! Ваш результат: {context.user_data['quiz_score']} з 5")
-            chat_modes[update.effective_user.id] = None
-            await start(update, context)
+            await send_text_buttons(update,
+                                    context,
+                                    f"Квіз завершено! Ваш результат: {context.user_data['quiz_score']} з 5",
+                                    {
+                                        'quiz_continue': "Продовжити квіз",
+                                        'quiz_change': "Змінити тему",
+                                        'quiz_end': "Закінчити квіз"
+                                    })
 
         else:
             gpt_next_question = await chat_gpt.add_message('quiz_more')
@@ -226,6 +231,31 @@ async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     gpt_response = await chat_gpt.add_message(query)
     await send_text(update, context, gpt_response)
 
+async def quiz_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+
+    if current_mode != 'QUIZ_GAME_MODE':
+        await update.callback_query.answer('Цей квіз уже завершено або він недійсний.')
+        return
+
+    query = update.callback_query.data
+    if query == 'quiz_end':
+        chat_gpt.message_list.clear()
+        await start(update, context)
+
+    elif query == 'quiz_change':
+        chat_gpt.message_list.clear()
+        chat_modes[update.effective_user.id] = None
+        await quiz(update, context)
+
+    elif query == 'quiz_continue':
+        context.user_data['quiz_questions_count'] = 0
+        context.user_data['quiz_score'] = 0
+        gpt_next_question = await chat_gpt.add_message('quiz_more')
+        await send_text(update, context, gpt_next_question)
+    await update.callback_query.answer()
+
 
 # Зареєструвати обробник команди можна так:
 app.add_handler(CommandHandler('start', start))
@@ -236,6 +266,7 @@ app.add_handler(CommandHandler('quiz', quiz))
 app.add_handler(CallbackQueryHandler(talk_buttons_handler, pattern='^talk_end.*$'))
 app.add_handler(CallbackQueryHandler(gpt_buttons_handler, pattern='^gpt_.*$'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*$'))
+app.add_handler(CallbackQueryHandler(quiz_buttons_handler, pattern='^quiz_(continue|change|end)$'))
 app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*$'))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, plain_text_handler))
 
