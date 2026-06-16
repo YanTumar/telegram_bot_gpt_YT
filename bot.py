@@ -38,7 +38,11 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
     if mode == 'QUIZ_MODE':
         warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
         if update.callback_query:
-            await update.callback_query.answer(warning_quiz)
+            if not update.callback_query.data.startswith('quiz_'):
+                await update.callback_query.answer(warning_quiz)
+                return True
+        elif update.message and update.message.text and update.message.text.startswith('/'):
+            await send_text(update, context, warning_quiz)
             return True
     return False
 
