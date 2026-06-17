@@ -14,6 +14,7 @@ app = ApplicationBuilder().token(credentials.BOT_TOKEN).build()
 
 chat_modes = {}
 warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
+warning_translator = "Будь-ласка, спочатку завершіть переклад."
 
 async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
@@ -77,6 +78,17 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
         elif update.message and update.message.text and update.message.text.startswith('/'):
             await send_text(update, context, warning_quiz)
+            return True
+
+
+    elif mode == 'TRANSLATOR_MODE':
+        if update.callback_query:
+            if not update.callback_query.data.startswith('translator_'):
+                await update.callback_query.answer(warning_translator)
+                return True
+
+        elif update.message and update.message.text and update.message.text.startswith('/'):
+            await send_text(update, context, warning_translator)
             return True
 
     return False
