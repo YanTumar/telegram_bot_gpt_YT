@@ -13,6 +13,14 @@ chat_gpt = ChatGptService(credentials.ChatGPT_TOKEN)
 app = ApplicationBuilder().token(credentials.BOT_TOKEN).build()
 
 chat_modes = {}
+
+TRANSLATOR_BUTTONS = {
+    'translator_en': "Англійська 🇺🇸",
+    'translator_uk': "Українська 🇺🇦",
+    'translator_fr': "Французька 🇫🇷",
+    'translator_de': "Німецька 🇩🇪"
+}
+
 warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
 warning_translator = "Будь-ласка, спочатку завершіть переклад."
 
@@ -117,10 +125,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'random': 'Дізнатися випадковий цікавий факт 🧠',
         'gpt': 'Задати питання чату GPT 🤖',
         'talk': 'Поговорити з відомою особистістю 👤',
-        'quiz': 'Взяти участь у квізі ❓'
-        # Додати команду в меню можна так:
-        # 'command': 'button text'
-
+        'quiz': 'Взяти участь у квізі ❓',
+        'translator': 'Перекладач 🌐'
     })
 
 
@@ -238,6 +244,9 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             gpt_next_question = await chat_gpt.add_message('quiz_more')
             await send_text(update, context, gpt_next_question)
 
+    elif mode == "TRANSLATOR_MODE":
+        await translator_text_handler(update, context)
+
 async def gpt_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query.data
     user_id = update.effective_user.id
@@ -313,6 +322,39 @@ async def quiz_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await send_text(update, context, gpt_next_question)
     await update.callback_query.answer()
 
+async def translator(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await is_user_busy(update, context):
+        return
+    chat_modes[update.effective_user.id] = 'TRANSLATOR_MODE'
+    start_message = load_message('translator')
+    await send_text_buttons(update, context, start_message, TRANSLATOR_BUTTONS)
+
+async def translator_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query.data
+    context.user_data['target_language'] = query
+
+    await update.callback_query.answer()
+
+    prompt = load_prompt('translator')
+    chat_gpt.set_prompt(prompt)
+
+    await send_text(update, context, "Чудово! Тепер напиши текст, який хочеш перекласти.")
+
+async def translator_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+    target_language = context.user_data['target_language']
+
+    gpt_response = await chat_gpt.add_message(f"Переклади на {target_language}: {user_text}")
+    await send_text_buttons(update, context, gpt_response, {'translator_end': "Закінчити переклад"})
+
+async def translator_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query.data
+    if query == 'translator_end':
+        chat_gpt.message_list.clear()
+        chat_modes[update.effective_user.id] = None
+        await start(update, context)
+    await update.callback_query.answer()
+
 
 # Зареєструвати обробник команди можна так:
 app.add_handler(CommandHandler('start', start))
@@ -320,9 +362,12 @@ app.add_handler(CommandHandler('random', random))
 app.add_handler(CommandHandler('gpt', gpt))
 app.add_handler(CommandHandler('talk', talk))
 app.add_handler(CommandHandler('quiz', quiz))
+app.add_handler(CommandHandler('translator', translator))
 app.add_handler(CallbackQueryHandler(talk_buttons_handler, pattern='^talk_end.*$'))
 app.add_handler(CallbackQueryHandler(gpt_buttons_handler, pattern='^gpt_.*$'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*$'))
+app.add_handler(CallbackQueryHandler(translator_button, pattern='^translator_(en|uk|fr|de)$'))
+app.add_handler(CallbackQueryHandler(translator_buttons_handler, pattern='^translator_end$'))
 app.add_handler(CallbackQueryHandler(quiz_buttons_handler, pattern='^quiz_(continue|change|end)$'))
 app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*$'))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, plain_text_handler))
