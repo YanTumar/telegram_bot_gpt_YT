@@ -345,7 +345,9 @@ async def translator_text_handler(update: Update, context: ContextTypes.DEFAULT_
     target_language = context.user_data['target_language']
 
     gpt_response = await chat_gpt.add_message(f"Переклади на {target_language}: {user_text}")
-    await send_text_buttons(update, context, gpt_response, {'translator_end': "Закінчити переклад"})
+    await send_text_buttons(update, context, gpt_response, {
+        'translator_end': "Закінчити переклад",
+        'translator_change': "Змінити мову"})
 
 async def translator_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query.data
@@ -353,6 +355,10 @@ async def translator_buttons_handler(update: Update, context: ContextTypes.DEFAU
         chat_gpt.message_list.clear()
         chat_modes[update.effective_user.id] = None
         await start(update, context)
+    elif query == 'translator_change':
+        chat_gpt.message_list.clear()
+        await translator(update, context)
+
     await update.callback_query.answer()
 
 
@@ -367,7 +373,7 @@ app.add_handler(CallbackQueryHandler(talk_buttons_handler, pattern='^talk_end.*$
 app.add_handler(CallbackQueryHandler(gpt_buttons_handler, pattern='^gpt_.*$'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*$'))
 app.add_handler(CallbackQueryHandler(translator_button, pattern='^translator_(en|uk|fr|de)$'))
-app.add_handler(CallbackQueryHandler(translator_buttons_handler, pattern='^translator_end$'))
+app.add_handler(CallbackQueryHandler(translator_buttons_handler, pattern='^translator_(end|change)$'))
 app.add_handler(CallbackQueryHandler(quiz_buttons_handler, pattern='^quiz_(continue|change|end)$'))
 app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*$'))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, plain_text_handler))
