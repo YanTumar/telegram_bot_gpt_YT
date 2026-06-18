@@ -132,7 +132,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'gpt': 'Задати питання чату GPT 🤖',
         'talk': 'Поговорити з відомою особистістю 👤',
         'quiz': 'Взяти участь у квізі ❓',
-        'translator': 'Перекладач 🌐'
+        'translator': 'Перекладач 🌐',
+        'recommend': 'Рекомендації книг/фільмів/музики 📚🎬🎵'
     })
 
 
@@ -409,17 +410,40 @@ async def recommend_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = load_prompt('recommend')
     chat_gpt.set_prompt(prompt)
 
+
 async def recommend_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    category = context.user_data['recommend_category']
+    category = context.user_data.get('recommend_category')
+
+    if update.message and update.message.text:
+        genre = update.message.text
+        context.user_data['recommend_genre'] = genre
+    else:
+        genre = context.user_data.get('recommend_genre')
 
     category_name = RECOMMEND_BUTTONS.get(category)
     await send_text(update, context, "Зачекайте хвилинку, підбираю найкращі варіанти...")
-    gpt_response = await chat_gpt.add_message(f"{category_name}: {user_text}")
+    ignored = ", ".join(context.user_data.get('ignored_titles', []))
+    gpt_response = await chat_gpt.add_message(f"{category_name}: {genre}. Не пропонуй це: {ignored}")
+
     await send_text_buttons(update, context, gpt_response, {
         'recommend_not_like': "Не подобається",
         'recommend_end': "Закінчити"
     })
+
+async def recommend_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query.data
+    if query == 'recommend_end':
+        chat_gpt.message_list.clear()
+        chat_modes[update.effective_user.id] = None
+        await start(update, context)
+
+    elif query == 'recommend_not_like':
+        last_recommendation = update.callback_query.message.text
+        if 'ignored_titles' not in context.user_data:
+            context.user_data['ignored_titles'] = []
+        context.user_data['ignored_titles'].append(last_recommendation)
+        await recommend_text_handler(update, context)
+    await update.callback_query.answer()
 
 
 # Зареєструвати обробник команди можна так:
@@ -429,6 +453,7 @@ app.add_handler(CommandHandler('gpt', gpt))
 app.add_handler(CommandHandler('talk', talk))
 app.add_handler(CommandHandler('quiz', quiz))
 app.add_handler(CommandHandler('translator', translator))
+app.add_handler(CommandHandler('recommend', recommend))
 app.add_handler(CallbackQueryHandler(talk_buttons_handler, pattern='^talk_end.*$'))
 app.add_handler(CallbackQueryHandler(gpt_buttons_handler, pattern='^gpt_.*$'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*$'))
@@ -436,6 +461,8 @@ app.add_handler(CallbackQueryHandler(translator_button, pattern='^translator_(en
 app.add_handler(CallbackQueryHandler(translator_buttons_handler, pattern='^translator_(end|change)$'))
 app.add_handler(CallbackQueryHandler(quiz_buttons_handler, pattern='^quiz_(continue|change|end)$'))
 app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*$'))
+app.add_handler(CallbackQueryHandler(recommend_button, pattern='^(books|films|music)$'))
+app.add_handler(CallbackQueryHandler(recommend_buttons_handler, pattern='^recommend_.*$'))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, plain_text_handler))
 
 
