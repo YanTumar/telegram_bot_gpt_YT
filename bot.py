@@ -253,6 +253,9 @@ async def plain_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif mode == "TRANSLATOR_MODE":
         await translator_text_handler(update, context)
 
+    elif mode == "RECOMMEND_GENRE_MODE":
+        await recommend_text_handler(update, context)
+
 async def gpt_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query.data
     user_id = update.effective_user.id
@@ -398,13 +401,25 @@ async def recommend_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['recommend_category'] = query
     chat_modes[update.effective_user.id] = 'RECOMMEND_GENRE_MODE'
 
-    category_name = RECOMMEND_BUTTONS.get()
+    category_name = RECOMMEND_BUTTONS.get(query)
 
     await send_text(update, context, f"Чудово! Тепер напиши жанр або настрій для категорії {category_name}:")
     await update.callback_query.answer()
 
     prompt = load_prompt('recommend')
     chat_gpt.set_prompt(prompt)
+
+async def recommend_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+    category = context.user_data['recommend_category']
+
+    category_name = RECOMMEND_BUTTONS.get(category)
+    await send_text(update, context, "Зачекайте хвилинку, підбираю найкращі варіанти...")
+    gpt_response = await chat_gpt.add_message(f"{category_name}: {user_text}")
+    await send_text_buttons(update, context, gpt_response, {
+        'recommend_not_like': "Не подобається",
+        'recommend_end': "Закінчити"
+    })
 
 
 # Зареєструвати обробник команди можна так:
