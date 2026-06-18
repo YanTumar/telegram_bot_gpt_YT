@@ -89,7 +89,7 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
             return True
 
 
-    elif mode == 'TRANSLATOR_MODE':
+    elif mode in ['TRANSLATOR_MODE', 'TRANSLATOR_CHOICE_MODE']:
         if update.callback_query:
             if not update.callback_query.data.startswith('translator_'):
                 await update.callback_query.answer(warning_translator)
@@ -325,11 +325,19 @@ async def quiz_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def translator(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await is_user_busy(update, context):
         return
-    chat_modes[update.effective_user.id] = 'TRANSLATOR_MODE'
+    chat_modes[update.effective_user.id] = 'TRANSLATOR_CHOICE_MODE'
+    await send_image(update, context, 'translator')
     start_message = load_message('translator')
     await send_text_buttons(update, context, start_message, TRANSLATOR_BUTTONS)
 
 async def translator_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+
+    if current_mode != 'TRANSLATOR_CHOICE_MODE':
+        await update.callback_query.answer("Цей список вже застарів")
+        return
+
     query = update.callback_query.data
     context.user_data['target_language'] = query
 
@@ -338,13 +346,16 @@ async def translator_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = load_prompt('translator')
     chat_gpt.set_prompt(prompt)
 
+    chat_modes[update.effective_user.id] = 'TRANSLATOR_MODE'
     await send_text(update, context, "Чудово! Тепер напиши текст, який хочеш перекласти.")
 
 async def translator_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     target_language = context.user_data['target_language']
 
-    gpt_response = await chat_gpt.add_message(f"Переклади на {target_language}: {user_text}")
+    language_name = TRANSLATOR_BUTTONS.get(target_language, "обрану мову")
+
+    gpt_response = await chat_gpt.add_message(f"Переклади на {language_name}: {user_text}")
     await send_text_buttons(update, context, gpt_response, {
         'translator_end': "Закінчити переклад",
         'translator_change': "Змінити мову"})
