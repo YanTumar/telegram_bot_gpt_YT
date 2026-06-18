@@ -21,6 +21,12 @@ TRANSLATOR_BUTTONS = {
     'translator_de': "Німецька 🇩🇪"
 }
 
+RECOMMEND_BUTTONS = {
+    'books': "Книги📚",
+    'films': "Фільми🎬",
+    'music': "Музика🎵"
+}
+
 warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
 warning_translator = "Будь-ласка, спочатку завершіть переклад."
 
@@ -371,6 +377,34 @@ async def translator_buttons_handler(update: Update, context: ContextTypes.DEFAU
         await translator(update, context)
 
     await update.callback_query.answer()
+
+async def recommend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await is_user_busy(update, context):
+        return
+    chat_modes[update.effective_user.id] = 'RECOMMEND_CHOICE_MODE'
+    start_message = load_message('recommend')
+    await send_image(update, context, 'recommend')
+    await send_text_buttons(update, context, start_message, RECOMMEND_BUTTONS)
+
+async def recommend_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+
+    if current_mode != 'RECOMMEND_CHOICE_MODE':
+        await update.callback_query.answer("Ця рекомендація вже застаріла")
+        return
+
+    query = update.callback_query.data
+    context.user_data['recommend_category'] = query
+    chat_modes[update.effective_user.id] = 'RECOMMEND_GENRE_MODE'
+
+    category_name = RECOMMEND_BUTTONS.get()
+
+    await send_text(update, context, f"Чудово! Тепер напиши жанр або настрій для категорії {category_name}:")
+    await update.callback_query.answer()
+
+    prompt = load_prompt('recommend')
+    chat_gpt.set_prompt(prompt)
 
 
 # Зареєструвати обробник команди можна так:
