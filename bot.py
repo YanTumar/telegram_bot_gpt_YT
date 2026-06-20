@@ -1,5 +1,3 @@
-from http.client import responses
-
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, ContextTypes, CommandHandler, MessageHandler, filters
 
@@ -8,6 +6,7 @@ from util import (load_message, send_text, send_image, show_main_menu,
                   default_callback_handler, load_prompt, send_text_buttons)
 
 import credentials
+import re
 
 chat_gpt = ChatGptService(credentials.ChatGPT_TOKEN)
 app = ApplicationBuilder().token(credentials.BOT_TOKEN).build()
@@ -29,6 +28,7 @@ RECOMMEND_BUTTONS = {
 
 warning_quiz = "Будь ласка, спочатку завершіть поточний квіз."
 warning_translator = "Будь-ласка, спочатку завершіть переклад."
+quiz_end_session = "Цей квіз уже завершено або він недійсний."
 
 async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id
@@ -103,6 +103,16 @@ async def is_user_busy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bo
 
         elif update.message and update.message.text and update.message.text.startswith('/'):
             await send_text(update, context, warning_translator)
+            return True
+
+    elif mode in ['RECOMMEND_CHOICE_MODE', 'RECOMMEND_GENRE_MODE']:
+        warning_recommend = "Будь ласка, спочатку завершіть роботу з рекомендаціями."
+        if update.callback_query:
+            await update.callback_query.answer(warning_recommend)
+            return True
+
+        elif update.message and update.message.text and update.message.text.startswith('/'):
+            await send_text(update, context, warning_recommend)
             return True
 
     return False
@@ -292,7 +302,7 @@ async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_mode = chat_modes.get(user_id)
 
     if current_mode != 'QUIZ_MODE':
-        await update.callback_query.answer('Цей квіз уже завершено або він недійсний.')
+        await update.callback_query.answer(quiz_end_session)
         return
 
     if await is_user_busy(update, context):
@@ -312,7 +322,7 @@ async def quiz_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     current_mode = chat_modes.get(user_id)
 
     if current_mode != 'QUIZ_GAME_MODE':
-        await update.callback_query.answer('Цей квіз уже завершено або він недійсний.')
+        await update.callback_query.answer(quiz_end_session)
         return
 
     query = update.callback_query.data
@@ -397,6 +407,7 @@ async def recommend_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if current_mode != 'RECOMMEND_CHOICE_MODE':
         await update.callback_query.answer("Ця рекомендація вже застаріла")
         return
+    chat_gpt.message_list.clear()
 
     query = update.callback_query.data
     context.user_data['recommend_category'] = query
@@ -412,6 +423,8 @@ async def recommend_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def recommend_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_gpt.message_list.clear()
+    chat_gpt.set_prompt(load_prompt('recommend'))
     category = context.user_data.get('recommend_category')
 
     if update.message and update.message.text:
@@ -422,26 +435,57 @@ async def recommend_text_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     category_name = RECOMMEND_BUTTONS.get(category)
     await send_text(update, context, "Зачекайте хвилинку, підбираю найкращі варіанти...")
-    ignored = ", ".join(context.user_data.get('ignored_titles', []))
-    gpt_response = await chat_gpt.add_message(f"{category_name}: {genre}. Не пропонуй це: {ignored}")
+    user_request = f"Категорія: {category_name}, Жанр/Настрій: {genre}. Поверни строго 3 варіанти. "
+    if context.user_data.get('ignored_titles'):
+        ignored = ". ".join(context.user_data['ignored_titles'])
+        user_request += f" Не пропонуй ці варіанти: {ignored}."
+    gpt_response = await chat_gpt.add_message(user_request)
 
-    await send_text_buttons(update, context, gpt_response, {
+    msg = await send_text_buttons(update, context, gpt_response, {
         'recommend_not_like': "Не подобається",
         'recommend_end': "Закінчити"
     })
 
+    context.user_data['last_recommend_msg_id'] = msg.message_id
+
 async def recommend_buttons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_mode = chat_modes.get(user_id)
+
+    if current_mode != 'RECOMMEND_GENRE_MODE':
+        await update.callback_query.answer("Ця рекомендація вже застаріла")
+        return
+
+    current_msg_id = update.callback_query.message.message_id
+    last_msg_id = context.user_data.get('last_recommend_msg_id')
+
+    if current_msg_id != last_msg_id:
+        await update.callback_query.answer("Це повідомлення вже застаріле.")
+        return
+
     query = update.callback_query.data
     if query == 'recommend_end':
         chat_gpt.message_list.clear()
         chat_modes[update.effective_user.id] = None
+        if 'ignored_titles' in context.user_data:
+            del context.user_data['ignored_titles']
         await start(update, context)
 
     elif query == 'recommend_not_like':
         last_recommendation = update.callback_query.message.text
+        if "не зовсім зрозумів" in last_recommendation.lower() or "перепрошую" in last_recommendation.lower():
+            chat_gpt.message_list.clear()
+            await update.callback_query.edit_message_text(
+                "Цей запит не було розпізнано. Будь ласка, введіть інший жанр у поле вводу знизу."
+            )
+            await update.callback_query.answer()
+            return
+
         if 'ignored_titles' not in context.user_data:
             context.user_data['ignored_titles'] = []
-        context.user_data['ignored_titles'].append(last_recommendation)
+
+        found_titles = re.findall(r'\*\*"([^"]+)"\*\*', last_recommendation)
+        context.user_data['ignored_titles'].extend(found_titles)
         await recommend_text_handler(update, context)
     await update.callback_query.answer()
 
